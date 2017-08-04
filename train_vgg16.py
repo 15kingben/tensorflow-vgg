@@ -107,7 +107,7 @@ def load_batch(batch_size = 16):
     return imgs, labels
 
 
-def run_batch(val_set, batch_size, fetches, feed_dict):
+def run_val_batch(val_set, batch_size, fetches, feed_dict):
     tloss = 0.0
     tlabels = None
     tpc = None
@@ -214,10 +214,11 @@ with tf.device('/gpu:0'):
 
 
         if step % validate_step == 0:
+
             fetches=[cost, accuracy, correct, predicted_class,vgg.prob]
             feed_dict={images: imgs, true_out: labels, train_mode: False}
 
-            tacc, tloss, tcpred, tlabels, tpred, tpc = run_batch(val_set, batch_size, fetches, feed_dict)
+            tacc, tloss, tcpred, tlabels, tpred, tpc = run_val_batch(val_set, batch_size, fetches, feed_dict)
 
 
             print('validation set')
@@ -246,7 +247,7 @@ print("Optimization Finished")
 fetches=[cost, accuracy, correct, predicted_class,vgg.prob]
 feed_dict={images: imgs, true_out: labels, train_mode: False}
 
-tacc, tloss, tcpred, tlabels, tpred, tpc = run_batch(val_set, batch_size, fetches, feed_dict)
+tacc, tloss, tcpred, tlabels, tpred, tpc = run_val_batch(val_set, batch_size, fetches, feed_dict)
 
 
 print('validation set')
