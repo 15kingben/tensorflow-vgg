@@ -6,14 +6,14 @@ from functools import reduce
 VGG_MEAN = [103.939, 116.779, 123.68]
 
 
-class Vgg19:
+class Vgg16:
     """
-    A trainable version VGG19.
+    A trainable version VGG16.
     """
 
-    def __init__(self, vgg19_npy_path=None, trainable=True, dropout=0.5, output_dim=1000, retrain="fc"):
-        if vgg19_npy_path is not None:
-            self.data_dict = np.load(vgg19_npy_path, encoding='latin1').item()
+    def __init__(self, vgg16_npy_path=None, trainable=True, dropout=0.5, output_dim=1000, retrain="semi"):
+        if vgg16_npy_path is not None:
+            self.data_dict = np.load(vgg16_npy_path, encoding='latin1').item()
         else:
             self.data_dict = None
 
@@ -160,7 +160,7 @@ class Vgg19:
 
         return var
 
-    def save_npy(self, sess, npy_path="./vgg19-save.npy"):
+    def save_npy(self, sess, npy_path="./vgg16-save.npy"):
         assert isinstance(sess, tf.Session)
 
         data_dict = {}
