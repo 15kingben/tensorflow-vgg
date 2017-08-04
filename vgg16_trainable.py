@@ -11,7 +11,7 @@ class Vgg19:
     A trainable version VGG19.
     """
 
-    def __init__(self, vgg19_npy_path=None, trainable=True, dropout=0.5):
+    def __init__(self, vgg19_npy_path=None, trainable=True, dropout=0.5, output_dim=1000, retrain="fc"):
         if vgg19_npy_path is not None:
             self.data_dict = np.load(vgg19_npy_path, encoding='latin1').item()
         else:
@@ -20,6 +20,9 @@ class Vgg19:
         self.var_dict = {}
         self.trainable = trainable
         self.dropout = dropout
+
+        self.output_dim=output_dim
+        self.retrain=retrain
 
     def build(self, rgb, train_mode=None):
         """
@@ -54,38 +57,35 @@ class Vgg19:
         self.conv3_1 = self.conv_layer(self.pool2, 128, 256, "conv3_1")
         self.conv3_2 = self.conv_layer(self.conv3_1, 256, 256, "conv3_2")
         self.conv3_3 = self.conv_layer(self.conv3_2, 256, 256, "conv3_3")
-        self.conv3_4 = self.conv_layer(self.conv3_3, 256, 256, "conv3_4")
-        self.pool3 = self.max_pool(self.conv3_4, 'pool3')
+        self.pool3 = self.max_pool(self.conv3_3, 'pool3')
 
         self.conv4_1 = self.conv_layer(self.pool3, 256, 512, "conv4_1")
         self.conv4_2 = self.conv_layer(self.conv4_1, 512, 512, "conv4_2")
         self.conv4_3 = self.conv_layer(self.conv4_2, 512, 512, "conv4_3")
-        self.conv4_4 = self.conv_layer(self.conv4_3, 512, 512, "conv4_4")
-        self.pool4 = self.max_pool(self.conv4_4, 'pool4')
+        self.pool4 = self.max_pool(self.conv4_3, 'pool4')
 
         self.conv5_1 = self.conv_layer(self.pool4, 512, 512, "conv5_1")
         self.conv5_2 = self.conv_layer(self.conv5_1, 512, 512, "conv5_2")
         self.conv5_3 = self.conv_layer(self.conv5_2, 512, 512, "conv5_3")
-        self.conv5_4 = self.conv_layer(self.conv5_3, 512, 512, "conv5_4")
-        self.pool5 = self.max_pool(self.conv5_4, 'pool5')
+        self.pool5 = self.max_pool(self.conv5_3, 'pool5')
 
-        self.fc6 = self.fc_layer(self.pool5, 25088, 4096, "fc6")  # 25088 = ((224 // (2 ** 5)) ** 2) * 512
+        self.fc6 = self.fc_layer(self.pool5, 25088, 4096, "fc6-custom")  # 25088 = ((224 // (2 ** 5)) ** 2) * 512
         self.relu6 = tf.nn.relu(self.fc6)
         if train_mode is not None:
             self.relu6 = tf.cond(train_mode, lambda: tf.nn.dropout(self.relu6, self.dropout), lambda: self.relu6)
         elif self.trainable:
             self.relu6 = tf.nn.dropout(self.relu6, self.dropout)
 
-        self.fc7 = self.fc_layer(self.relu6, 4096, 4096, "fc7")
+        self.fc7 = self.fc_layer(self.relu6, 4096, 4096, "fc7-custom")
         self.relu7 = tf.nn.relu(self.fc7)
         if train_mode is not None:
             self.relu7 = tf.cond(train_mode, lambda: tf.nn.dropout(self.relu7, self.dropout), lambda: self.relu7)
         elif self.trainable:
             self.relu7 = tf.nn.dropout(self.relu7, self.dropout)
 
-        self.fc8 = self.fc_layer(self.relu7, 4096, 1000, "fc8")
+        self.fc8 = self.fc_layer(self.relu7, 4096, self.output_dim, "fc8-custom")
 
-        self.prob = tf.nn.softmax(self.fc8, name="prob")
+        self.prob = self.fc8
 
         self.data_dict = None
 
@@ -116,10 +116,20 @@ class Vgg19:
 
     def get_conv_var(self, filter_size, in_channels, out_channels, name):
         initial_value = tf.truncated_normal([filter_size, filter_size, in_channels, out_channels], 0.0, 0.001)
-        filters = self.get_var(initial_value, name, 0, name + "_filters")
 
+        if self.retrain == 'complete':
+            rt = True
+        elif self.retrain == 'semi':
+            if 'conv1' in name or 'conv2' in name:
+                rt = True
+            else:
+                rt = False
+        else:
+            rt = False
+
+        filters = self.get_var(initial_value, name, 0, name + "_filters", retrain=rt)
         initial_value = tf.truncated_normal([out_channels], .0, .001)
-        biases = self.get_var(initial_value, name, 1, name + "_biases")
+        biases = self.get_var(initial_value, name, 1, name + "_biases", retrain=rt)
 
         return filters, biases
 
@@ -132,13 +142,13 @@ class Vgg19:
 
         return weights, biases
 
-    def get_var(self, initial_value, name, idx, var_name):
+    def get_var(self, initial_value, name, idx, var_name, retrain=True):
         if self.data_dict is not None and name in self.data_dict:
             value = self.data_dict[name][idx]
         else:
             value = initial_value
 
-        if self.trainable:
+        if self.trainable and retrain:
             var = tf.Variable(value, name=var_name)
         else:
             var = tf.constant(value, dtype=tf.float32, name=var_name)
